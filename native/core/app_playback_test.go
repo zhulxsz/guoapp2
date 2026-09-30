@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -140,5 +141,49 @@ func TestNativeHLSExtensionlessPlaylistsAndRedirectBase(t *testing.T) {
 	}
 	if read(segment) != "synthetic media" {
 		t.Fatal("segment body changed")
+	}
+}
+
+func TestNativeStreamKeepsEncryptedMP4WhenURLContainsHLS(t *testing.T) {
+	payload := []byte{0, 0, 0, 32, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/media/hls/video.mp4" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Write(payload)
+	}))
+	defer upstream.Close()
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+	address, token := stream.nativeOpen(providerMedia{
+		URL:     upstream.URL + "/media/hls/video.mp4",
+		CENCKey: []byte("0123456789abcdef"),
+		Referer: "https://novel.snssdk.com/",
+	})
+	defer stream.nativeRelease(token)
+	if !strings.HasSuffix(address, ".mp4") {
+		t.Fatalf("encrypted MP4 was published as playlist: %s", address)
+	}
+	response, err := http.Get(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("read failed: %v, %d", err, response.StatusCode)
+	}
+	if !bytes.Equal(body, payload) {
+		t.Fatalf("encrypted MP4 was rewritten: %q", body)
 	}
 }

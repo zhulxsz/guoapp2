@@ -234,6 +234,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _configurePictureInPicture();
     _subscriptions.add(
       _player.stream.error.listen((error) {
+        DiaryService.add('[Play] 播放器错误: $error');
         if (_enhancement.handlePlaybackError(error)) return;
         if (!_closed && _acceptErrors && mounted && error.trim().isNotEmpty) {
           _queueRecovery();
@@ -1004,7 +1005,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         final platform = _player.platform;
         if (platform is NativePlayer) {
           if (Platform.isAndroid) {
-            if (_television) {
+            final encrypted = plan.decryptionKey.isNotEmpty;
+            if (encrypted) {
+              await platform.setProperty('hwdec', 'no');
+            } else if (_television) {
               await platform.setProperty('hwdec', 'mediacodec');
               await platform.setProperty('hwdec-codecs', 'all');
               await platform.setProperty('opengl-pbo', 'yes');
@@ -1047,7 +1051,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _plan = plan;
         installed = true;
         _acceptErrors = true;
-        DiaryService.add('[Play] 调用 _player.open: url=${plan.url}, headers=${plan.headers.keys.toList()}');
+        DiaryService.add(
+          '[Play] 调用 _player.open: url=${plan.url}, cenc=${plan.decryptionKey.isNotEmpty}, headers=${plan.headers.keys.toList()}',
+        );
         await _player.open(
           Media(
             plan.url,

@@ -95,11 +95,7 @@ func (stream *nativeStreamServer) nativeOpen(media providerMedia) (string, strin
 	stream.sessions[token] = session
 	stream.mu.Unlock()
 	entry := nativeStreamAsset{address: media.URL, contentType: "video/mp4"}
-	isHLS := media.Playlist != "" || len(media.HLSKey) > 0 || strings.Contains(strings.ToLower(media.URL), "m3u8") || strings.Contains(strings.ToLower(media.URL), "hls")
-	if isHLS {
-		entry.contentType = "application/vnd.apple.mpegurl"
-	}
-	if parsed, err := url.Parse(media.URL); err == nil && strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
+	if nativeStreamIsPlaylist(media) {
 		entry.contentType = "application/vnd.apple.mpegurl"
 	}
 	if media.Playlist != "" {
@@ -107,6 +103,25 @@ func (stream *nativeStreamServer) nativeOpen(media providerMedia) (string, strin
 		entry.contentType = "application/vnd.apple.mpegurl"
 	}
 	return stream.nativeAsset(token, session, entry), token
+}
+
+func nativeStreamIsPlaylist(media providerMedia) bool {
+	if media.Playlist != "" || len(media.HLSKey) > 0 {
+		return true
+	}
+	return nativeAddressLooksLikePlaylist(media.URL)
+}
+
+func nativeAddressLooksLikePlaylist(address string) bool {
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return false
+	}
+	path := strings.ToLower(parsed.Path)
+	if strings.HasSuffix(path, ".mp4") || strings.HasSuffix(path, ".m4s") || strings.HasSuffix(path, ".ts") {
+		return false
+	}
+	return strings.HasSuffix(path, ".m3u8")
 }
 
 func (stream *nativeStreamServer) nativeRelease(token string) {
@@ -301,7 +316,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	if response.Request != nil && response.Request.URL != nil {
 		finalURL = response.Request.URL
 	}
-	playlist := strings.Contains(asset.contentType, "mpegurl") || strings.Contains(contentType, "mpegurl") || strings.HasSuffix(strings.ToLower(finalURL.Path), ".m3u8") || strings.Contains(strings.ToLower(finalURL.String()), "m3u8") || len(session.key) > 0
+	playlist := strings.Contains(asset.contentType, "mpegurl") || strings.Contains(contentType, "mpegurl") || nativeAddressLooksLikePlaylist(finalURL.String())
 	reader := bufio.NewReader(response.Body)
 	if !playlist && request.Method == http.MethodGet {
 		peek, _ := reader.Peek(512)
