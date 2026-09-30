@@ -180,17 +180,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
+    final useMediaKit =
+        !Platform.isAndroid || widget.detail.drama.source == 'hongguo';
     _player =
         widget.playerFactory?.call() ??
-        (Platform.isAndroid
-            ? LunaExoPlayer()
-            : Player(
+        (useMediaKit
+            ? Player(
                 configuration: const PlayerConfiguration(
                   bufferSize: 32 * 1024 * 1024,
                   logLevel: MPVLogLevel.error,
                 ),
-              ));
-    _video = widget.videoBuilder == null && !Platform.isAndroid
+              )
+            : LunaExoPlayer());
+    _video = widget.videoBuilder == null && useMediaKit
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
