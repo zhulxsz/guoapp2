@@ -1005,10 +1005,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         final platform = _player.platform;
         if (platform is NativePlayer) {
           if (Platform.isAndroid) {
-            final encrypted = plan.decryptionKey.isNotEmpty;
-            if (encrypted) {
-              await platform.setProperty('hwdec', 'no');
-            } else if (_television) {
+            if (_television) {
               await platform.setProperty('hwdec', 'mediacodec');
               await platform.setProperty('hwdec-codecs', 'all');
               await platform.setProperty('opengl-pbo', 'yes');
